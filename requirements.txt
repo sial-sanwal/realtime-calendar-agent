@@ -1,0 +1,9 @@
+openai>=1.50.0
+google-api-python-client
+google-auth-httplib2
+google-auth-oauthlib
+pyaudio
+python-dotenv
+websockets
+aiohttp
+streamlit

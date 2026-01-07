@@ -9,27 +9,41 @@ from googleapiclient.discovery import build
 
 SCOPES = ['https://www.googleapis.com/auth/calendar']
 
+# Global variable to store user credentials (in-memory for the session)
+USER_CREDENTIALS = None
+
+def set_user_credentials(creds):
+    global USER_CREDENTIALS
+    USER_CREDENTIALS = creds
+
 def get_calendar_service():
-    """Shows basic usage of the Google Calendar API.
-    Prints the start and name of the next 10 events on the user's calendar.
-    """
-    creds = None
-    # The file token.json stores the user's access and refresh tokens, and is
-    # created automatically when the authorization flow completes for the first
-    # time.
-    if os.path.exists('token.json'):
-        creds = Credentials.from_authorized_user_file('token.json', SCOPES)
-    # If there are no (valid) credentials available, let the user log in.
-    if not creds or not creds.valid:
-        if creds and creds.expired and creds.refresh_token:
-            creds.refresh(Request())
-        else:
-            flow = InstalledAppFlow.from_client_secrets_file(
-                'credentials.json', SCOPES)
-            creds = flow.run_local_server(port=0)
-        # Save the credentials for the next run
-        with open('token.json', 'w') as token:
-            token.write(creds.to_json())
+    """Authenticates with Google Calendar API using User Credentials if available, else local file."""
+    creds = USER_CREDENTIALS
+    
+    # Fallback to local file if no user credentials provided (for testing/dev)
+    if not creds:
+        if os.path.exists('token.json'):
+            creds = Credentials.from_authorized_user_file('token.json', SCOPES)
+        
+        if not creds or not creds.valid:
+            if creds and creds.expired and creds.refresh_token:
+                creds.refresh(Request())
+            else:
+                if os.path.exists('credentials.json'):
+                    flow = InstalledAppFlow.from_client_secrets_file(
+                        'credentials.json', SCOPES)
+                    creds = flow.run_local_server(port=0)
+                else:
+                    return None # No credentials found
+            
+            # Save the credentials for the next run (only for local file mode)
+            if not USER_CREDENTIALS and creds: # Only save if we're not using in-memory credentials and creds were obtained
+                with open('token.json', 'w') as token:
+                    token.write(creds.to_json())
+
+    if not creds:
+        print("Error: No valid credentials found or provided.")
+        return None
 
     service = build('calendar', 'v3', credentials=creds)
     return service

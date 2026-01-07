@@ -2,11 +2,75 @@
 import streamlit as st
 import asyncio
 import json
+import os
 from agent import RealtimeAgent
+import tools  # Import tools to set credentials
+from google_auth_oauthlib.flow import Flow
+from google.oauth2.credentials import Credentials
 
 # Set page configuration
 st.set_page_config(page_title="AI Calendar Agent", layout="wide")
 st.title("📅 Realtime Calendar Agent")
+
+# Sidebar for Configuration
+with st.sidebar:
+    st.header("⚙️ Settings")
+    
+    # 1. OpenAI API Key
+    api_key_input = st.text_input("OpenAI API Key", type="password", value=os.getenv("OPENAI_API_KEY") or "")
+    if api_key_input:
+        os.environ["OPENAI_API_KEY"] = api_key_input
+
+    st.divider()
+
+    # 2. Google Calendar OAuth
+    st.subheader("Google Integration")
+    
+    # We need a client_secrets.json for the web flow to work properly 
+    # OR we can ask user for Client ID / Secret manually if file doesn't exist
+    
+    if "google_creds" not in st.session_state:
+        st.write("Not Connected")
+        
+        # Check if we are in the middle of a redirect
+        if "code" in st.query_params:
+            code = st.query_params["code"]
+            try:
+                # Reconstruct flow to fetch token
+                # client_secrets.json is required for this part in a real app
+                # For this demo, we assume the user puts a 'client_secrets.json' in the root
+                flow = Flow.from_client_secrets_file(
+                    'credentials.json',
+                    scopes=['https://www.googleapis.com/auth/calendar.events', 'https://www.googleapis.com/auth/calendar.readonly'],
+                    redirect_uri='http://localhost:8501'
+                )
+                flow.fetch_token(code=code)
+                st.session_state.google_creds = flow.credentials
+                st.success("Connected!")
+                st.query_params.clear() # Clean URL
+                st.rerun()
+            except Exception as e:
+                st.error(f"Auth failed: {e}")
+        else:
+            if st.button("Connect Google Calendar"):
+                try:
+                    flow = Flow.from_client_secrets_file(
+                        'credentials.json',
+                        scopes=['https://www.googleapis.com/auth/calendar.events', 'https://www.googleapis.com/auth/calendar.readonly'],
+                        redirect_uri='http://localhost:8501'
+                    )
+                    auth_url, _ = flow.authorization_url(prompt='consent')
+                    st.markdown(f"[>> Click here to Login with Google <<]({auth_url})")
+                except FileNotFoundError:
+                    st.error("Missing ' credentials.json'. Please add it to project root.")
+    else:
+        st.success("✅ Connected to Google Calendar")
+        # Inject credentials into tools
+        tools.set_user_credentials(st.session_state.google_creds)
+        
+        if st.button("Logout"):
+            del st.session_state.google_creds
+            st.rerun()
 
 # Initialize chat history
 if "messages" not in st.session_state:
